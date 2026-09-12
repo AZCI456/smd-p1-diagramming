@@ -1,4 +1,4 @@
-```plantuml
+````plantuml
 @startuml
 !theme plain
 top to bottom direction
@@ -17,52 +17,57 @@ skinparam ranksep 80
 '/
 
 /'
-Formatting to show role distintions'/
-skinparam class {
-    BackgroundColor White
-    ArrowColor #444444
-    BorderColor #333333
-}
+Formatting to show who set up what - smarter way to organise blame (its a software term - not the pejorative connitation)
 
-skinparam class<<Controller>> {
+put it after the class name to highlight it - I've listed game as an example with myself
+'/
+
+' Aaron
+skinparam class<<Aaron>>{
     BackgroundColor #E3F2FD
     BorderColor #1E88E5
 }
 
-skinparam class<<Entity>> {
+' Tsun
+skinparam class<<Tsun>>{
     BackgroundColor #FFF9C4
     BorderColor #FDD835
 }
 
-skinparam class<<Framework>> {
-    BackgroundColor #EEEEEE
-    BorderColor #9E9E9E
+' Ben
+skinparam class<<Ben>>{
+    BackgroundColor #E8F5E9
+    BorderColor #43A047
 }
 
-'hide tagging for formatting - after show tags for labelling
+'''' begin code 
+
 hide stereotype
 show <<interface>> stereotype
+show <<abstract>> stereotype
 
-class Driver <<Controller>> {
+class Driver  {
     +{static} DEFAULT_PROPERTIES_PATH : String
     +{static} main(args) : void
 }
 
-class PropertiesLoader <<Controller>> {
+class PropertiesLoader  {
     +{static} loadPropertiesFile(path) : Properties
 }
 
-class Game <<Controller>> {
+class Game <<Aaron>> {
     -gameController : GameController
     -gameCallback : GameCallback
+    -grid : IGameGrid
     +Game(gameCallback, properties)
     +act() : void
     +runApp() : String
+    -buildInitialActorLocations(mapData) : List<ActorLocation>
 }
 
-class GameGrid <<JGameGrid>><<Framework>>
+class GameGrid <<JGameGrid>>
 
-class GameCallback <<Controller>> {
+class GameCallback  {
     -logBuilder : StringBuilder
     +pacManLocationChanged(...) : void
     +monsterLocationChanged(...) : void
@@ -71,91 +76,167 @@ class GameCallback <<Controller>> {
     +getAllLog() : String
 }
 
-class GameController <<Controller>> {
-    #grid : PacManGameGrid
+
+
+class GameController  {
+    #grid : IGameGrid
     #pacActor : PacActor
     -monsters : List<Monster>
-    -properties : Properties
+    -collisionHandler : CollisionHandler
     -gameCallback : GameCallback
+    +GameController(grid, pacActor, monsters, collisionHandler, gameCallback)
+    +act() : void
     +checkEndGame() : void
     +hasEndGame() : boolean
     +getActorLocations() : List<ActorLocation>
     +getPacActor() : PacActor
-    +bullshit(): void
+}            
+
+class CollisionHandler  {
+    +checkPacManMonsterCollision(pacActor, monsters) : boolean
+    +handleItemConsumption(pacActor, grid, gameCallback) : void
 }
 
-class PacManGameGrid <<Entity>> {
+interface IGameGrid  {
+    +getCell(location) : int
+    +setCell(location, value: int) : void
+    +isWall(location) : boolean
+    +isInBounds(location) : boolean
+    +getAvailableCells() : List<Location>
+    +getWidth() : int
+    +getHeight() : int
+}
+
+
+class PacManGameGrid  implements IGameGrid {
     -mazeArray : int[][]
     +getCell(location) : int
+    +setCell(location, value: int) : void
+    +isWall(location) : boolean
+    +isInBounds(location) : boolean
+    +getAvailableCells() : List<Location>
+    +getWidth() : int
+    +getHeight() : int
 }
 
-class PacActor <<Entity>> {
-    -gameController : GameController
+class PacActor  {
     -pacmanController : PacmanController
     -nbPills : int
     -score : int
     -randomiser : Random
+    -grid : IGameGrid
     +act() : void
     +eatPill(location) : void
     +canMove(location) : boolean
 }
 
-class PacmanController <<Controller>> {
+class PacmanController  {
     -pacActor : PacActor
     +keyRepeated(keyCode) : void
 }
 
-interface GGKeyRepeatListener <<Framework>>
+interface GGKeyRepeatListener 
 
-class Monster <<Entity>> {
-    #gameController : GameController
-    -scriptedMoves : List<String>
+abstract class Monster extends Actor {
+    #grid : IGameGrid
     #randomiser : Random
-    +{static} createMonsters(gameController, properties) : List<ActorLocation>
-    +act() : void
+    +Monster(type, initialLocation, initialDirection, grid)
+    +{abstract} act() : void
     +getType() : MonsterType
     +getState() : String
+    #canMoveTo(location) : boolean
 }
 
-enum MonsterType <<Entity>> {
-    Troll
-    +getImageName() : String
+class Troll extends Monster {
+    +act() : void
 }
 
-class ActorLocation <<Entity>> {
+class Ghost extends Monster {
+    +act() : void
+}
+
+
+class MonsterFactory  {
+    +{static} createMonsters(spawnConfigs : List<MonsterSpawnConfig>, grid : IGameGrid) : List<Monster>
+}
+
+
+class MapLoader  {
+    +{static} loadMap(properties : Properties) : MapData
+}
+
+class MapData  {
+    -mazeArray : int[][]
+    -pacManSpawn : Location
+    -pacManSpawnDirection : CompassDirection
+    -monsterSpawnConfigs : List<MonsterSpawnConfig>
+}
+
+class MonsterSpawnConfig  {
+    -type : MonsterType
+    -location : Location
+    -direction : CompassDirection
+}
+
+enum MonsterType  {
+    TROLL
+    GHOST
+}
+
+
+class ActorLocation  {
     -actor : Actor
     -location : Location
     -direction : CompassDirection
 }
 
-class Actor <<Framework>>
+class Actor  {
+    -location : Location
+    -direction : CompassDirection
+    +getLocation() : Location
+    +setLocation(location) : void
+    +getDirection() : CompassDirection
+    +setDirection(direction) : void
+    +{abstract} act() : void
+}
 
 ' Relationships
 Driver ..> Game : creates
 Driver ..> PropertiesLoader : loads
 Driver ..> GameCallback : creates
-Driver ..> ActorLocation : places actors
 
 Game --> GameGrid
 Game --> GameCallback
 Game *-- GameController
+Game ..> MapLoader : loads map data
+Game ..> MonsterFactory : creates monsters
+Game ..> ActorLocation : builds initial placements
+Game --> IGameGrid
 
 GameController --> GameCallback
-GameController *-- PacManGameGrid
+GameController --> IGameGrid
 GameController *-- PacActor
-GameController "1" <-- "0..*" Monster : baseline = single Troll
-GameController ..> Monster : createMonsters()
+GameController *-- CollisionHandler
+GameController "1" o-- "0..*" Monster
+CollisionHandler ..> IGameGrid : queries cells
+CollisionHandler ..> GameCallback : reports events
 
+PacActor --> IGameGrid : queries cells
 PacmanController --> PacActor : drives via keys
 PacmanController ..|> GGKeyRepeatListener
 
 PacActor --|> Actor
 Monster --|> Actor
+Monster --> IGameGrid : queries cells
 
-Monster ..> MonsterType : getType() /\ncreateMonsters()
-Monster ..> GameCallback : reads state for logging
-Monster ..> ActorLocation : createMonsters() returns
+MapLoader ..> MapData : produces
+MapData "1" --> "0..*" MonsterSpawnConfig
+MonsterFactory ..> MonsterSpawnConfig : reads
+MonsterFactory ..> Monster : creates
+Monster ..> MonsterType : getType()
 
 ActorLocation --> Actor
 @enduml
-```
+````
+
+
