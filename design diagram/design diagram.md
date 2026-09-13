@@ -1,5 +1,6 @@
 ````plantuml
 @startuml
+/' Touch settings at own peril - better to discus online first '/
 !theme plain
 top to bottom direction
 hide circle
@@ -9,32 +10,22 @@ skinparam nodesep 90
 skinparam ranksep 80
 
 /'
-    Don't touch the above settings - if you wanna change something post it on discord first so we can all see 
-
-    Take a look at the syntax at planttext.com
-
-    Happy coding
+Formatting to show who set up what
 '/
 
-/'
-Formatting to show who set up what - smarter way to organise blame (its a software term - not the pejorative connitation)
-
-put it after the class name to highlight it - I've listed game as an example with myself
-'/
-
-' Aaron
+' Aaron - Blue
 skinparam class<<Aaron>>{
     BackgroundColor #E3F2FD
     BorderColor #1E88E5
 }
 
-' Tsun
+' Tsun - Yellow
 skinparam class<<Tsun>>{
     BackgroundColor #FFF9C4
     BorderColor #FDD835
 }
 
-' Ben
+' Ben - Green
 skinparam class<<Ben>>{
     BackgroundColor #E8F5E9
     BorderColor #43A047
@@ -51,13 +42,17 @@ class Driver  {
     +{static} main(args) : void
 }
 
-class PropertiesLoader  {
-    +{static} loadPropertiesFile(path) : Properties
+' Loads configurable maze / all new game additions
+' Info expert assignment - otherwise fine
+class PropertiesLoader <<Aaron>> {
+    -{static} loadPropertiesFile(path) : Properties
 }
 
-class Game <<Aaron>> {
+' Super class Too many responsibilities 
+class Game <<Aaron>>{
     -gameController : GameController
     -gameCallback : GameCallback
+    ' IGameGrid is an interface grid should be an actual class 
     -grid : IGameGrid
     +Game(gameCallback, properties)
     +act() : void
@@ -65,6 +60,7 @@ class Game <<Aaron>> {
     -buildInitialActorLocations(mapData) : List<ActorLocation>
 }
 
+' exists because cannot use package as datatype 
 class GameGrid <<JGameGrid>>
 
 class GameCallback  {
@@ -76,9 +72,7 @@ class GameCallback  {
     +getAllLog() : String
 }
 
-
-
-class GameController  {
+class GameController <<Tsun>> {
     #grid : IGameGrid
     #pacActor : PacActor
     -monsters : List<Monster>
@@ -97,6 +91,7 @@ class CollisionHandler  {
     +handleItemConsumption(pacActor, grid, gameCallback) : void
 }
 
+' stupido design
 interface IGameGrid  {
     +getCell(location) : int
     +setCell(location, value: int) : void
@@ -137,22 +132,25 @@ class PacmanController  {
 
 interface GGKeyRepeatListener 
 
-abstract class Monster extends Actor {
+/'  Des Issue 2 resolved: removed direct dependecies with GameControler
+add params to act() to update state instead
+    Des Issue 4 resolved: Monster now abstract and polymorphic'/
+abstract class Monster <<Tsun>> extends Actor {
     #grid : IGameGrid
     #randomiser : Random
     +Monster(type, initialLocation, initialDirection, grid)
+    ' What is the difference between these two below - also note the visibility (+) should it be public? Most probably not @Aaron
     +{abstract} act() : void
+    +act(pacActorLocation : Location) : void
     +getType() : MonsterType
     +getState() : String
     #canMoveTo(location) : boolean
 }
 
-class Troll extends Monster {
-    +act() : void
+class Troll <<Tsun>> extends Monster {
 }
 
-class Ghost extends Monster {
-    +act() : void
+class Ghost <<Tsun>> extends Monster {
 }
 
 
@@ -178,6 +176,7 @@ class MonsterSpawnConfig  {
     -direction : CompassDirection
 }
 
+' Phat code smell - get rid of make monster abstract and generalise with inheritence @Aaron
 enum MonsterType  {
     TROLL
     GHOST
