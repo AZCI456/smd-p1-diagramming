@@ -1,6 +1,6 @@
 ````plantuml
 @startuml
-/' Touch settings at own peril - better to discus online first '/
+/' Touch settings at own peril - better to discuss online first '/
 !theme plain
 top to bottom direction
 hide circle
@@ -10,6 +10,9 @@ skinparam nodesep 90
 skinparam ranksep 80
 ' use +, -, # instead of shapes
 skinparam classAttributeIconSize 0
+
+
+title PacMan in the Multiverse - Design Model
 
 ' -----------------------------------------------------
 ' -----------------------------------------------------
@@ -42,16 +45,24 @@ inherits from jgamegrid: GUI component. The engine automatically creates the gam
 '/
 
 class GameGrid <<JGameGrid>>{
-    -mazeArray : int[][]
+    ' renders the grid'
+    -mazeArray : CellType[][]
     ' encapsulation and info expert fields
     -columnCount: int
     -rowCount: int
-    ' probably better to return the object at the position. ie the reference to that objects instantiation.
-    +getItem(Position) : Cell 
+    ' All items are loaded dynamically on screen based on their position - state - so that it perfectly interacts
+    +getItems() : List<Item>
     ' corresponds to the type (int reference) static object at that position
-    +getCell(location): int
+    'UNVERFIED NEED: '+getCell(location): Entity
     ' to be used by Actor classes so they dont pass through walls
     +canMove(location): Boolean
+    ' checks if there are any pills or gold left (ignores icecube) - called by EndGameChecker 
+    +hasCollectiblesRemaining() : boolean
+}
+
+enum CellType {
+    WALL
+    OPEN
 }
 
 /' Super class Too many responsibilities 
@@ -63,7 +74,7 @@ class GameGrid <<JGameGrid>>{
 
 '/
 
-class Game <<Aaron>>{
+class Game{
     -gameController : GameController
     ' retrieve the accumulated log data
     -gameCallback : GameCallback
@@ -96,46 +107,45 @@ class GameController {
     -pacActor : PacActor
     -monsters : List<Monster>
     ' delegate instatiation to GameController - remove parameter from constructor
+    ' use method injection to handle updates on call
     -collisionHandler : CollisionHandler
     -gameCallback : GameCallback
     ' minimal constructor 
     +GameController(grid,  gameCallback)
     'called in construction - can replace with a Object 
     +init_level(pacActor, monsters)
-    ' to advance the world by one step
+    ' to advance the world by one step - public by definition in JGameGrid
     +act() : void
-    ' kinda useless getters and setters TODO: perhaps remove from the design'
-    +getActorLocations() : List<ActorLocation>
-    +getPacActor() : PacActor
+    ' called within act() to check if the game is ended (ie !ONGOING) - if so stop game and '
+    -checkGameState(pacActor : PacActor, monsters : List<Monster>) : GAMESTATE
+    +GameController(grid : GameGrid, gameCallback : GameCallback)
+    -setMonsterStates(state : MonsterState) : void
 }            
 
-/'Exist as otherwise game controller has to ping too many other classes - not sure what this violates - perhaps its high coupling
 
-creates an intermediary allows for better extensibility and protected variations
-'/
-class EndGameChecker{
-    -gameEnded: Boolean
-    ' should return the output rather than void
-    +checkEndGame() : Boolean
+enum GameState {
+    ONGOING
+    WIN
+    LOSE
 }
-' To-do Create weak dependency lines between end game checker items. create dependency between game controller and this 
 
 /'
-
 grid, gameCallback - removed from item consumptoin replaced with abstract class item
 
 '/
 class CollisionHandler  {
     ' smarter is to hashmap monster positions however not necessary for monsters << n'
-    +checkPacManMonsterCollision(pacActor : PacActor, monsters : List<Monster>) : boolean
-    +handleItemConsumption(pacActor : PacActor, item : Item) : void
+    ' designed to use method injection
+    +checkPacManMonsterCollision(gc: GameController, pacActor : PacActor, monsters : List<Monster>) : boolean
+    ' method is polymorphic - calls act on item and item handles the changes - more extensible + item info expert'
+    +checkItemConsumption(gc : GameController, pacActor : PacActor, items : List<Item>) : void
 }
-/'TODO: change all functoin signutures to the format name : Type '/
+/'TODO: change all function signatures to the format name : Type '/
 
 /'represents everything visible on the map - actors and items'/
 abstract class Entity{
     -location : Location
-    -sprite: RandoImg.jpg/idk
+    -sprite: RandoImg.jpg/idk    
 }
 
 
@@ -144,10 +154,35 @@ abstract class Entity{
 ' ------------------ITEMS SECTION ---------------------
 ' ------------------------------------------------------
 
+/'TODO: examine interaction of items with rest of system
+
+entity cannot exist without a cell I'm pretty sure (might need to add a cell class and attach it to grid)
+
+orion and gold piece - packman and all items 
+monsters and fury
+'/
+
+' Assuming that items don't overlap in the testing - TODO: confirm if this introduces issues
 abstract class Item{
-    
+    +{abstract} applyEffect(gc : GameController) : void
 }
 
+class Pill extends Item{
+    ' increment the score by 1'
+    +applyEffect(gc : GameController) : void
+}
+
+' orion `'
+class GoldPiece extends Item{
+    ' increment score by 5 and then perform fury '
+    +applyEffect(gc : GameController) : void
+
+}
+
+class IceCube extends Item{
+    ' setup monster freeze state - watch the wizard '
+    +applyEffect(gc : GameController) : void
+}
 
 ' ------------------------------------------------------
 ' ------------------ACTORS SECTION ---------------------
@@ -157,10 +192,11 @@ abstract class Item{
 ' Actor location redundant class removed - prevents fragmentation'
 
 ' Parent of all dynamic entities'
-abstract class Actor extends entity{
+abstract class Actor extends Entity{
     -direction : CompassDirection
     ' forces child class implementation
     +{abstract} act() : void
+    
 }
 
 /' PacActor analysis
@@ -181,7 +217,6 @@ Issues regarding single responsibility
 '/
 
 class PacActor extends Actor {
-    -pacmanController : PacmanController
     -nbPills : int
     -score : int
     ' resp info expert on pac pos'
@@ -211,8 +246,10 @@ issues
 abstract class Monster extends Actor {    
     ' Enum as fixed states based on interactions
     -currentState: MonsterState
+    -stateTimer: int
     ' passing in grid redundent - type is useless with polymorphism'
     +Monster(initialLocation, initialDirection)
+    +updateStateTimer(newState: MonsterState)
     
 }
 
@@ -225,13 +262,16 @@ class GameRandomiser {
     +{static} pickRandom(items : List<T>) : T
 }
 
-/' all possible states after item consumption '/
+/' all possible states after item consumption 
+designed using info expert - the timer is stored with the state
+'/
 enum MonsterState {
-    NORMAL
-    FRIGHTENED
-    FROZEN
-    ' for wizard esp
-    REDUCEDSPEED
+    NORMAL(0)
+    FURIOUS(5)
+    FROZEN(3)
+    REDUCEDSPEED(3)
+    -duration : int
+    +getDuration() : int
 }
 
 ' ----------- MONSTER SUBCLASSES --------------
@@ -254,11 +294,12 @@ TODO: constructor
  overridden act() method simply checks the coordinates of patrolLocations.get(currentIndex), moves one step closer to it (in either free direction), and increments the index when it arrives.
 '/
 class Orion extends Monster {
-    ' The patrol route'
+    ' The patrol route - not the gold just the locations - decoupled
     -patrolLocations : List<Location>
     ' where the next petrol location is (start at 0 use mod to loop around)
     -currentIndex: int
     +act() : void
+    +Orion(location : Location, direction : CompassDirection, patrolLocations : List<Location>)
 }
 
 /'
@@ -293,7 +334,7 @@ static utility class
 '/
 class MonsterFactory {
     ' Troll & Orion creation
-    +{static} createMonster(type : MonsterType, location : Location, direction : CompassDirection) : Monster
+    +{static} createMonster(monsterType : String, location : Location, direction : CompassDirection) : Monster
     ' Orion creation
     +{static} createOrion(location : Location, direction : CompassDirection, goldLocations : List<Location>) : Orion
 }
@@ -313,6 +354,11 @@ Orion --|> Monster
 Wizard --|> Monster
 PacActor ..|> GGKeyRepeatListener
 
+' additional item relationships
+Item --|> Entity
+Pill --|> Item
+GoldPiece --|> Item
+IceCube --|> Item
 
 ' -----------------------------------------------------
 ' ------------------ OTHER RELATIONSHIPS --------------
@@ -334,11 +380,8 @@ GameController --> GameGrid
 GameController --> GameCallback
 GameController *-- PacActor
 GameController *-- CollisionHandler
-GameController --> EndGameChecker : uses
 GameController "1" o-- "0..*" Monster
 
-' EndGameChecker
-EndGameChecker ..> GameController : queries state
 
 ' CollisionHandler
 CollisionHandler ..> PacActor : checks
@@ -348,6 +391,7 @@ CollisionHandler ..> Monster : checks
 PacActor --> GameGrid : queries cells
 
 ' Monster & Subclasses
+' unavoidable under the Information Expert principle. Monsters cannot autonomously navigate, check for wall collisions, or inspect adjacent cells ithout querying grid layout data. consider dependency modelling however
 Monster --> GameGrid : queries cells
 Monster --> MonsterState : has state
 Troll ..> GameRandomiser : uses
@@ -359,6 +403,22 @@ MapLoader ..> MonsterFactory : requests creation
 ' MonsterFactory
 MonsterFactory ..> Monster : creates
 MonsterFactory ..> Orion : creates with gold locations
+
+
+' additional....
+' Collision & Items
+CollisionHandler ..> Item : interacts
+Item ..> GameController : modifies state
+
+' Factory
+MonsterFactory ..> Wizard : creates
+MonsterFactory ..> Troll : creates
+
+' Grid & Entities
+' aggregation - can exist without but is contained within
+GameGrid "1" o-- "0..*" Item : contains
+GameGrid ..> CellType : uses
+
 
 @enduml
 ````
